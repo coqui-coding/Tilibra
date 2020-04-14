@@ -1,5 +1,5 @@
 from mutagen.id3 import TIT2, TPE1, TDRC, TCON, APIC
-from os.path import isfile, isdir, join
+from os.path import join as os_join
 from bs4 import BeautifulSoup
 from mutagen.mp3 import MP3
 from pathlib import Path
@@ -13,17 +13,17 @@ import os
 def format_bytes(size):
     power = 2**10
     n = 0
-    power_labels = {0: '', 1: 'kilo', 2: 'mega', 3: 'giga', 4: 'tera'}
+    power_labels = {0: 'bytes', 1: 'KB', 2: 'MB', 3: 'GB', 4: 'TB'}
     while size > power:
         size /= power
         n += 1
-    return size, power_labels[n]+'bytes'
+    return size, power_labels[n]
 
 
 def scan_directory():
 
     songs = [
-        os.path.join(folder[0], song)
+        os_join(folder[0], song)
         for folder in os.walk(music_directory)
         for song in folder[2]
         if Path(song).suffix == '.mp3'
@@ -65,6 +65,8 @@ def display_song_details(path_of_song):
 
 def search_tags():
 
+    # Search for song in discogs
+
     source = requests.get(f"https://www.discogs.com/search/?q={Path(song_path).stem}&type=all").text
 
     soup = BeautifulSoup(source, 'lxml')
@@ -73,29 +75,35 @@ def search_tags():
 
     link = search.div.a['href']
 
+    # Go to first response of the search and parse for tags
+
     song_source = requests.get('https://www.discogs.com' + link).text
 
     song_soup = BeautifulSoup(song_source, 'lxml')
 
     discogs_profile = song_soup.find('div', 'profile')
 
+    song_title_artist = discogs_profile.find('h1', id='profile_title')
+
+    song_date_genre = discogs_profile.find_all('div')
+
+    # Retrieve tags
+
+    song_artist = song_title_artist.span.span.a.text.strip()
+
+    song_title = song_title_artist.find_all('span')[2].text.strip()
+
+    song_date = song_date_genre[5].text.strip()
+
+    song_genre = song_date_genre[3].text.strip()
+
+    # Get cover art
+
     image_source = song_soup.find('span', 'thumbnail_center').img['src']
-
-    song_tpe1_tit2 = discogs_profile.find('h1', id='profile_title')
-
-    song_tcon_tdrc = discogs_profile.find_all('div')
-
-    song_artist = song_tpe1_tit2.span.span.a.text
-
-    song_title = song_tpe1_tit2.find_all('span')[2].text.strip()
-
-    song_date = song_tcon_tdrc[5].text.strip()
-
-    song_genre = song_tcon_tdrc[3].text.strip()
 
     response = requests.get(image_source)
 
-    img = Image.open(BytesIO(response.content))
+    image = Image.open(BytesIO(response.content))
 
     return {
         'title': song_title,
@@ -103,7 +111,7 @@ def search_tags():
         'genre': song_genre,
         'year': song_date,
         'image_src': image_source,
-        'image': img
+        'image': image
     }
 
 
@@ -129,6 +137,8 @@ if __name__ == '__main__':
 
     for song_directory in all_songs[::-1]:
         print(all_songs.index(song_directory), Path(song_directory).name)
+
+    print(f'\nDetected {len(all_songs)} songs')
 
     choice = input('\nWhat song do you want to tagify?\n')
 
