@@ -9,8 +9,6 @@ import requests
 import datetime
 import os
 
-version = '20.04.13'
-
 
 def format_bytes(size):
     power = 2**10
@@ -24,29 +22,12 @@ def format_bytes(size):
 
 def scan_directory():
 
-    songs = list()
-
-    for folder in os.listdir(music_directory):
-
-        if isfile(join(music_directory, folder)):
-            continue
-
-        for file in os.listdir(join(music_directory, folder)):
-
-            if Path(file).suffix in ['.ini', '.jpg', '.png']:
-                continue
-
-            elif isfile(join(music_directory, folder, file)):
-                songs.append(join(music_directory, folder, file))
-
-            elif isdir(join(music_directory, folder, file)):
-                for album_song in os.listdir(join(music_directory, folder, file)):
-
-                    if Path(album_song).suffix in ['.ini', '.jpg', '.png']:
-                        continue
-
-                    elif isfile(join(music_directory, folder, file, album_song)):
-                        songs.append(join(music_directory, folder, file, album_song))
+    songs = [
+        os.path.join(folder[0], song)
+        for folder in os.walk(music_directory)
+        for song in folder[2]
+        if Path(song).suffix == '.mp3'
+    ]
 
     return sorted(songs, key=os.path.getctime, reverse=True)
 
@@ -143,7 +124,7 @@ def write_tags():
 
 if __name__ == '__main__':
 
-    music_directory = r'C:\Users\DVT\Music'
+    music_directory = os.path.join(os.environ['HOMEPATH'], 'Music')
     all_songs = scan_directory()
 
     for song_directory in all_songs[::-1]:
