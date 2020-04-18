@@ -1,4 +1,5 @@
 from mutagen.id3 import TIT2, TPE1, TDRC, TCON, APIC
+from configparser import ConfigParser
 from os.path import join as os_join
 from bs4 import BeautifulSoup
 from mutagen.mp3 import MP3
@@ -29,7 +30,18 @@ def scan_directory():
         if Path(song).suffix == '.mp3'
     ]
 
-    return sorted(songs, key=os.path.getctime, reverse=True)
+    if config_file_readings['DEFAULT']['scan_type'] == 'date_created':
+        sort_key = os.path.getctime
+    elif config_file_readings['DEFAULT']['scan_type'] == 'date_modified':
+        sort_key = os.path.getmtime
+    else:
+        print('ERROR, inappropriate scan type!')
+        exit()
+
+    if config_file_readings['DEFAULT']['scan_limit'] != 'none':
+        songs = songs[:int(config_file_readings['DEFAULT']['scan_limit'])]
+
+    return sorted(songs, key=sort_key, reverse=True)
 
 
 def display_song_details():
@@ -157,9 +169,39 @@ def write_tags():
     mus.tags.save(path_to_song, pathlib_song.name)
 
 
+def read_config():
+
+    if not pathlib_config_file.exists():
+        pathlib_config_file.touch()
+
+        config = ConfigParser()
+
+        config['DEFAULT'] = {
+            'music_directory': os.path.join(os.environ['HOMEPATH'], 'Music'),
+            '; use date_created or date_modified': '',
+            'scan_type': 'date_created',
+            '; use None or a number to maximize the songs shown': '',
+            'scan_limit': 'None'
+        }
+
+        with open(config_file_path, 'w') as configFile:
+            config.write(configFile)
+
+    config = ConfigParser()
+
+    config.read(config_file_path)
+
+    return config
+
+
 if __name__ == '__main__':
 
-    music_directory = os.path.join(os.environ['HOMEPATH'], 'Music')
+    config_file_path = 'config.ini'
+    pathlib_config_file = Path(config_file_path)
+
+    config_file_readings = read_config()
+
+    music_directory = config_file_readings['DEFAULT']['music_directory']
     all_songs = scan_directory()
 
     for song_directory in all_songs[::-1]:
