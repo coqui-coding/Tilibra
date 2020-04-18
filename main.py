@@ -26,7 +26,7 @@ def scan_directory():
         os_join(folder[0], song)
         for folder in os.walk(music_directory)
         for song in folder[2]
-        if Path(song).suffix in ['.mp3']
+        if Path(song).suffix == '.mp3'
     ]
 
     return sorted(songs, key=os.path.getctime, reverse=True)
@@ -97,25 +97,32 @@ def search_tags(search):
 
     if len(tracklist_songs) > 2:
         for track in tracklist_songs:
-            if track.find('span', 'tracklist_track_title').text.lower() in search.lower():
-                song_title = track.find('span', 'tracklist_track_title').text
-            if ''.join([i for i in track.find('a').text.lower() if not i.isdigit()]).replace(' ()', '') in search.lower():
-                song_artist = ''.join([i for i in track.find('a').text.lower() if not i.isdigit()]).replace(' ()', '').title()
 
+            track_title = track.find('span', 'tracklist_track_title').text
+            track_artist = track.find('a').text
+
+            if track_title.lower() in search.lower():
+                song_title = track_title
+            if ''.join([i for i in track_artist.lower() if not i.isdigit()]).replace(' ()', '') in search.lower():
+                song_artist = ''.join([i for i in track_artist.lower() if not i.isdigit()]).replace(' ()', '').title()
     else:
         song_artist = profile_title.span.span.a.text.strip()
 
         song_title = profile_title.find_all('span')[2].text.strip()
 
     for data in all_div_in_profile_title:
-        if data.text.strip().lower() in ['genre:']:
-            song_genre = all_div_in_profile_title[all_div_in_profile_title.index(data) + 1].text.strip()
+
+        data_text = data.text
+        data_index = all_div_in_profile_title.index(data)
+
+        if data_text.strip().lower() == 'genre:':
+            song_genre = all_div_in_profile_title[data_index + 1].text.strip()
             if ',' in song_genre:
                 song_genre = song_genre.split(', ')[0]
-        elif data.text.strip().lower() == 'year:':
-            song_date = all_div_in_profile_title[all_div_in_profile_title.index(data) + 1].text.strip()
-        elif data.text.strip().lower() == 'released:':
-            song_date = all_div_in_profile_title[all_div_in_profile_title.index(data) + 1].text.strip().split(' ')[-1]
+        elif data_text.strip().lower() == 'year:':
+            song_date = all_div_in_profile_title[data_index + 1].text.strip()
+        elif data_text.strip().lower() == 'released:':
+            song_date = all_div_in_profile_title[data_index + 1].text.strip().split(' ')[-1]
 
     # Get cover art
 
