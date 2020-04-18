@@ -46,12 +46,12 @@ def scan_directory():
         print('ERROR, inappropriate scan type!')
         exit()
 
-    scan_result = set(scan_result)
+    scan_result = sorted(list(set(scan_result)), key=sort_key, reverse=True)
 
     if config_file_readings['DEFAULT']['scan_limit'] != 'none':
         scan_result = scan_result[:int(config_file_readings['DEFAULT']['scan_limit'])]
 
-    return sorted(scan_result, key=sort_key, reverse=True)
+    return scan_result
 
 
 def display_song_details():
@@ -93,7 +93,7 @@ def search_tags(search):
 
     # Search for song in discogs
 
-    source = requests.get(f"https://www.discogs.com/search/?q={search}&type=all").text
+    source = requests.get(f"https://www.discogs.com/search/?q={search}&type=release").text
 
     soup = BeautifulSoup(source, 'lxml')
 
@@ -274,6 +274,8 @@ if __name__ == '__main__':
 
     type_scan = input('Do you want to scan for albums(a) or songs(s)?')
     all_songs = scan_directory()
+
+    os.system('cls')
 
     for song_directory in all_songs[::-1]:
         print(all_songs.index(song_directory), Path(song_directory).name)
