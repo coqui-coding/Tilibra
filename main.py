@@ -1,4 +1,4 @@
-from mutagen.id3 import TIT2, TPE1, TDRC, TCON, APIC
+from mutagen.id3 import TIT2, TPE1, TDRC, TCON, APIC, TALB, TRCK
 from configparser import ConfigParser
 from os.path import join as os_join
 from bs4 import BeautifulSoup
@@ -23,12 +23,20 @@ def format_bytes(size):
 
 def scan_directory():
 
-    songs = [
-        os_join(folder[0], song)
-        for folder in os.walk(music_directory)
-        for song in folder[2]
-        if Path(song).suffix == '.mp3'
-    ]
+    if type_scan == 'a':
+        scan_result = [
+            root
+            for root, dirs, files in os.walk(os_join(os.environ['HOMEPATH'], 'Music'))
+            for song in files
+            if Path(song).suffix == '.mp3'
+        ]
+    else:
+        scan_result = [
+            os_join(folder[0], song)
+            for folder in os.walk(music_directory)
+            for song in folder[2]
+            if Path(song).suffix == '.mp3'
+        ]
 
     if config_file_readings['DEFAULT']['scan_type'] == 'date_created':
         sort_key = os.path.getctime
@@ -38,10 +46,12 @@ def scan_directory():
         print('ERROR, inappropriate scan type!')
         exit()
 
-    if config_file_readings['DEFAULT']['scan_limit'] != 'none':
-        songs = songs[:int(config_file_readings['DEFAULT']['scan_limit'])]
+    scan_result = set(scan_result)
 
-    return sorted(songs, key=sort_key, reverse=True)
+    if config_file_readings['DEFAULT']['scan_limit'] != 'none':
+        scan_result = scan_result[:int(config_file_readings['DEFAULT']['scan_limit'])]
+
+    return sorted(scan_result, key=sort_key, reverse=True)
 
 
 def display_song_details():
@@ -49,30 +59,34 @@ def display_song_details():
     os.system('cls')
     print(path_to_song + '\n')
 
-    music_file = MP3(path_to_song)
+    if type_scan == 's':
+        music_file = MP3(path_to_song)
 
-    comment = None
-    image_details = None
+        comment = None
+        image_details = None
 
-    for a in music_file.tags.keys():
-        if 'APIC' in a:
-            image_details = music_file.tags[a].desc
-        elif 'COMM' in a:
-            comment = music_file.tags[a]
+        for a in music_file.tags.keys():
+            if 'APIC' in a:
+                image_details = music_file.tags[a].desc
+            elif 'COMM' in a:
+                comment = music_file.tags[a]
 
-    print('Title : ' + str(music_file.tags.get('TIT2')))
-    print('Artist : ' + str(music_file.tags.get('TPE1')))
-    print('Album : ' + str(music_file.tags.get('TALB')))
-    print('Date : ' + str(music_file.tags.get('TDRC')))
-    print('Track # : ' + str(music_file.tags.get('TRCK')))
-    print('Genre : ' + str(music_file.tags.get('TCON')))
-    print('Comment : ' + str(comment))
-    print('Album Artist : ' + str(music_file.tags.get('TPE2')))
-    print('Composer : ' + str(music_file.tags.get('TCOM')))
-    print('Disc # : ' + str(music_file.tags.get('TPOS')))
-    print('Length : ' + str(datetime.timedelta(seconds=music_file.info.length))[:7])
-    print('Size : ' + str(format_bytes(pathlib_song.stat().st_size)))
-    print('Cover Art : ' + str(image_details))
+        print('Title : ' + str(music_file.tags.get('TIT2')))
+        print('Artist : ' + str(music_file.tags.get('TPE1')))
+        print('Album : ' + str(music_file.tags.get('TALB')))
+        print('Date : ' + str(music_file.tags.get('TDRC')))
+        print('Track # : ' + str(music_file.tags.get('TRCK')))
+        print('Genre : ' + str(music_file.tags.get('TCON')))
+        print('Comment : ' + str(comment))
+        print('Album Artist : ' + str(music_file.tags.get('TPE2')))
+        print('Composer : ' + str(music_file.tags.get('TCOM')))
+        print('Disc # : ' + str(music_file.tags.get('TPOS')))
+        print('Length : ' + str(datetime.timedelta(seconds=music_file.info.length))[:7])
+        print('Size : ' + str(format_bytes(pathlib_song.stat().st_size)))
+        print('Cover Art : ' + str(image_details))
+    else:
+        for song in songs_in_directory:
+            print(song)
 
 
 def search_tags(search):
@@ -105,36 +119,64 @@ def search_tags(search):
 
     # Retrieve tags
 
-    song_genre, song_date, song_title, song_artist = '', '', '', ''
+    song_genre, song_date, song_title = '', '', list()
+    song_artist, song_album, song_number = '', '', list()
 
-    if len(tracklist_songs) > 2:
+    if type_scan == 's':
+        if len(tracklist_songs) > 2:
+            for track in tracklist_songs:
+
+                track_title = track.find('span', 'tracklist_track_title').text
+                track_artist = track.find('a').text
+
+                if track_title.lower() in search.lower():
+                    song_title = list(track_title)
+                if ''.join([i for i in track_artist.lower() if not i.isdigit()]).replace(' ()', '') in search.lower():
+                    song_artist = ''.join([i for i in track_artist.lower() if not i.isdigit()]).replace(' ()', '').title()
+        else:
+            song_artist = profile_title.span.span.a.text.strip()
+
+            song_title = profile_title.find_all('span')[2].text.strip()
+
+        for data in all_div_in_profile_title:
+
+            data_text = data.text
+            data_index = all_div_in_profile_title.index(data)
+
+            if data_text.strip().lower() == 'genre:':
+                song_genre = all_div_in_profile_title[data_index + 1].text.strip()
+                if ',' in song_genre:
+                    song_genre = song_genre.split(', ')[0]
+            elif data_text.strip().lower() == 'year:':
+                song_date = all_div_in_profile_title[data_index + 1].text.strip()
+            elif data_text.strip().lower() == 'released:':
+                song_date = all_div_in_profile_title[data_index + 1].text.strip().split(' ')[-1]
+    else:
+        song_artist = profile_title.span.span.a.text.strip()
+        song_album = profile_title.find_all('span')[2].text.strip()
+
         for track in tracklist_songs:
 
             track_title = track.find('span', 'tracklist_track_title').text
-            track_artist = track.find('a').text
+            song_number.append(track.find('td', 'tracklist_track_pos').text)
 
-            if track_title.lower() in search.lower():
-                song_title = track_title
-            if ''.join([i for i in track_artist.lower() if not i.isdigit()]).replace(' ()', '') in search.lower():
-                song_artist = ''.join([i for i in track_artist.lower() if not i.isdigit()]).replace(' ()', '').title()
-    else:
-        song_artist = profile_title.span.span.a.text.strip()
+            for song in songs_in_directory:
+                if track_title.lower() in song.lower():
+                    song_title.append(track_title)
 
-        song_title = profile_title.find_all('span')[2].text.strip()
+        for data in all_div_in_profile_title:
 
-    for data in all_div_in_profile_title:
+            data_text = data.text
+            data_index = all_div_in_profile_title.index(data)
 
-        data_text = data.text
-        data_index = all_div_in_profile_title.index(data)
-
-        if data_text.strip().lower() == 'genre:':
-            song_genre = all_div_in_profile_title[data_index + 1].text.strip()
-            if ',' in song_genre:
-                song_genre = song_genre.split(', ')[0]
-        elif data_text.strip().lower() == 'year:':
-            song_date = all_div_in_profile_title[data_index + 1].text.strip()
-        elif data_text.strip().lower() == 'released:':
-            song_date = all_div_in_profile_title[data_index + 1].text.strip().split(' ')[-1]
+            if data_text.strip().lower() == 'genre:':
+                song_genre = all_div_in_profile_title[data_index + 1].text.strip()
+                if ',' in song_genre:
+                    song_genre = song_genre.split(', ')[0]
+            elif data_text.strip().lower() == 'year:':
+                song_date = all_div_in_profile_title[data_index + 1].text.strip()
+            elif data_text.strip().lower() == 'released:':
+                song_date = all_div_in_profile_title[data_index + 1].text.strip().split(' ')[-1]
 
     # Get cover art
 
@@ -147,26 +189,53 @@ def search_tags(search):
     return {
         'title': song_title,
         'artist': song_artist,
+        'album': song_album,
         'genre': song_genre,
         'year': song_date,
+        'track_number': song_number,
         'image_src': image_source,
         'image': image
     }
 
 
 def write_tags():
-    mus = MP3(path_to_song)
+    if type_scan == 's':
+        music = MP3(path_to_song)
 
-    b = BytesIO()
-    results['image'].save(b, format='PNG')
+        b = BytesIO()
+        results['image'].save(b, format='PNG')
 
-    mus.tags.add(TIT2(text=results['title']))
-    mus.tags.add(TPE1(text=results['artist']))
-    mus.tags.add(TDRC(text=results['year']))
-    mus.tags.add(TCON(text=results['genre']))
-    mus.tags.add(APIC(data=b.getvalue(), mime='image/png'))
+        music.tags.add(TIT2(text=results['title']))
+        music.tags.add(TPE1(text=results['artist']))
+        music.tags.add(TDRC(text=results['year']))
+        music.tags.add(TCON(text=results['genre']))
+        music.tags.add(APIC(data=b.getvalue(), mime='image/png'))
 
-    mus.tags.save(path_to_song, pathlib_song.name)
+        music.tags.save(path_to_song, pathlib_song.name)
+    else:
+        for s in songs_in_directory:
+            if Path(s).suffix != '.mp3':
+                continue
+
+            song_path = os_join(path_to_song, s)
+            music = MP3(song_path)
+
+            for s_number, s2 in zip(results['track_number'], results['title']):
+                if s2.lower() in s.lower():
+                    music.tags.add(TIT2(text=s2))
+                    music.tags.add(TRCK(text=s_number))
+                    break
+
+            b = BytesIO()
+            results['image'].save(b, format='PNG')
+
+            music.tags.add(TPE1(text=results['artist']))
+            music.tags.add(TDRC(text=results['year']))
+            music.tags.add(TCON(text=results['genre']))
+            music.tags.add(TALB(text=results['album']))
+            music.tags.add(APIC(data=b.getvalue(), mime='image/png'))
+
+            music.tags.save(song_path, pathlib_song.name)
 
 
 def read_config():
@@ -177,7 +246,7 @@ def read_config():
         config = ConfigParser()
 
         config['DEFAULT'] = {
-            'music_directory': os.path.join(os.environ['HOMEPATH'], 'Music'),
+            'music_directory': os_join(os.environ['HOMEPATH'], 'Music'),
             '; use date_created or date_modified': '',
             'scan_type': 'date_created',
             '; use None or a number to maximize the songs shown': '',
@@ -202,17 +271,24 @@ if __name__ == '__main__':
     config_file_readings = read_config()
 
     music_directory = config_file_readings['DEFAULT']['music_directory']
+
+    type_scan = input('Do you want to scan for albums(a) or songs(s)?')
     all_songs = scan_directory()
 
     for song_directory in all_songs[::-1]:
         print(all_songs.index(song_directory), Path(song_directory).name)
 
-    print(f'\nDetected {len(all_songs)} songs')
+    if type_scan == 's':
+        print(f'\nDetected {len(all_songs)} songs')
+    else:
+        print(f'\nDetected {len(all_songs)} albums')
 
     choice = input('\nWhat song do you want to tagify?\n')
 
     path_to_song = all_songs[int(choice)]
     pathlib_song = Path(path_to_song)
+
+    songs_in_directory = os.listdir(path_to_song) if type_scan == 'a' else ''
 
     display_song_details()
 
@@ -235,10 +311,20 @@ if __name__ == '__main__':
     results['image'].show()
     image_name = os.path.splitext(results['image_src'].split('/')[-1])[0]
 
-    print('Title : ' + results['title'])
-    print('Artist : ' + results['artist'])
-    print('Genre : ' + results['genre'])
-    print('Year : ' + results['year'])
+    if type_scan == 's':
+        print('Title : ' + str(results['title']))
+        print('Artist : ' + results['artist'])
+        print('Genre : ' + results['genre'])
+        print('Year : ' + results['year'])
+    else:
+        print('Songs found :')
+        for song_number, song in zip(results['track_number'], results['title']):
+            print(f'\t{song_number} {song}')
+        print('Album : ' + results['album'])
+        print('Artist : ' + results['artist'])
+        print('Genre : ' + results['genre'])
+        print('Year : ' + results['year'])
+
     print('Image Source: ' + results['image_src'])
 
     write_choice = input('\nAre you sure you want to tagify?[y]\n')
