@@ -13,11 +13,11 @@ import os
 def format_bytes(size):
     power = 2**10
     n = 0
-    power_labels = {0: 'bytes', 1: 'KB', 2: 'MB', 3: 'GB', 4: 'TB'}
+    power_labels = {0: ' bytes', 1: ' KB', 2: ' MB', 3: ' GB', 4: ' TB'}
     while size > power:
         size /= power
         n += 1
-    return size, power_labels[n]
+    return str(size)[:4] + power_labels[n]
 
 
 def scan_directory():
@@ -26,18 +26,18 @@ def scan_directory():
         os_join(folder[0], song)
         for folder in os.walk(music_directory)
         for song in folder[2]
-        if Path(song).suffix == '.mp3'
+        if Path(song).suffix in ['.mp3']
     ]
 
     return sorted(songs, key=os.path.getctime, reverse=True)
 
 
-def display_song_details(path_of_song):
+def display_song_details():
 
     os.system('cls')
-    print(path_of_song + '\n')
+    print(path_to_song + '\n')
 
-    music_file = MP3(path_of_song)
+    music_file = MP3(path_to_song)
 
     comment = None
     image_details = None
@@ -59,21 +59,21 @@ def display_song_details(path_of_song):
     print('Composer : ' + str(music_file.tags.get('TCOM')))
     print('Disc # : ' + str(music_file.tags.get('TPOS')))
     print('Length : ' + str(datetime.timedelta(seconds=music_file.info.length))[:7])
-    print('Size : ' + str(format_bytes(Path(path_of_song).stat().st_size))[1:5] + 'MB')
+    print('Size : ' + str(format_bytes(pathlib_song.stat().st_size)))
     print('Cover Art : ' + str(image_details))
 
 
-def search_tags():
+def search_tags(search):
 
     # Search for song in discogs
 
-    source = requests.get(f"https://www.discogs.com/search/?q={Path(song_path).stem}&type=all").text
+    source = requests.get(f"https://www.discogs.com/search/?q={search}&type=all").text
 
     soup = BeautifulSoup(source, 'lxml')
 
-    search = soup.find(id='search_results')
+    search_results = soup.find(id='search_results')
 
-    link = search.div.a['href']
+    link = search_results.div.a['href']
 
     # Go to first response of the search and parse for tags
 
@@ -83,19 +83,39 @@ def search_tags():
 
     discogs_profile = song_soup.find('div', 'profile')
 
-    song_title_artist = discogs_profile.find('h1', id='profile_title')
+    profile_title = discogs_profile.find('h1', id='profile_title')
 
-    song_date_genre = discogs_profile.find_all('div')
+    tracklist = song_soup.find('div', id='tracklist')
+
+    all_div_in_profile_title = discogs_profile.find_all('div')
+
+    tracklist_songs = tracklist.find_all('tr')
 
     # Retrieve tags
 
-    song_artist = song_title_artist.span.span.a.text.strip()
+    song_genre, song_date, song_title, song_artist = '', '', '', ''
 
-    song_title = song_title_artist.find_all('span')[2].text.strip()
+    if len(tracklist_songs) > 2:
+        for track in tracklist_songs:
+            if track.find('span', 'tracklist_track_title').text.lower() in search.lower():
+                song_title = track.find('span', 'tracklist_track_title').text
+            if ''.join([i for i in track.find('a').text.lower() if not i.isdigit()]).replace(' ()', '') in search.lower():
+                song_artist = ''.join([i for i in track.find('a').text.lower() if not i.isdigit()]).replace(' ()', '').title()
 
-    song_date = song_date_genre[5].text.strip()
+    else:
+        song_artist = profile_title.span.span.a.text.strip()
 
-    song_genre = song_date_genre[3].text.strip()
+        song_title = profile_title.find_all('span')[2].text.strip()
+
+    for data in all_div_in_profile_title:
+        if data.text.strip().lower() in ['genre:']:
+            song_genre = all_div_in_profile_title[all_div_in_profile_title.index(data) + 1].text.strip()
+            if ',' in song_genre:
+                song_genre = song_genre.split(', ')[0]
+        elif data.text.strip().lower() == 'year:':
+            song_date = all_div_in_profile_title[all_div_in_profile_title.index(data) + 1].text.strip()
+        elif data.text.strip().lower() == 'released:':
+            song_date = all_div_in_profile_title[all_div_in_profile_title.index(data) + 1].text.strip().split(' ')[-1]
 
     # Get cover art
 
@@ -116,7 +136,7 @@ def search_tags():
 
 
 def write_tags():
-    mus = MP3(song_path)
+    mus = MP3(path_to_song)
 
     b = BytesIO()
     results['image'].save(b, format='PNG')
@@ -127,7 +147,7 @@ def write_tags():
     mus.tags.add(TCON(text=results['genre']))
     mus.tags.add(APIC(data=b.getvalue(), mime='image/png'))
 
-    mus.tags.save(song_path, Path(song_path).name)
+    mus.tags.save(path_to_song, pathlib_song.name)
 
 
 if __name__ == '__main__':
@@ -142,15 +162,27 @@ if __name__ == '__main__':
 
     choice = input('\nWhat song do you want to tagify?\n')
 
-    song_path = all_songs[int(choice)]
+    path_to_song = all_songs[int(choice)]
+    pathlib_song = Path(path_to_song)
 
-    display_song_details(song_path)
+    display_song_details()
 
     search_choice = input('\nDo you want to search for possible tags?[y]\n')
     if search_choice != 'y':
         exit()
 
-    results = search_tags()
+    query = input('\nQuery [press enter for filename or provide artist and song name]: ')
+    if query == '':
+        query = pathlib_song.stem
+
+    try:
+        results = search_tags(query)
+    except ConnectionError as error:
+        os.system('cls')
+        print('You must be connected to the internet!')
+        os.system('pause')
+        exit()
+
     results['image'].show()
     image_name = os.path.splitext(results['image_src'].split('/')[-1])[0]
 
